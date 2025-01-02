@@ -57,6 +57,9 @@ class Program
                 case "list":
                     HandleList(etcdClient, etcdCredentials);
                     break;
+                case "watch":
+                    HandleWatch(etcdClient, etcdCredentials, parts[1]);
+                    break;
                 case "exit":
                     HandleExit();
                     break;
@@ -87,6 +90,7 @@ class Program
             set <key> <value>   Set a key-value pair in etcd
             get <key>           Get the value of a key from etcd
             delete <key>        Delete a key from etcd
+            watch <key>         Watch a key in etcd
             list                List all keys stored in etcd
             exit                Exit the console
         ");
@@ -164,6 +168,12 @@ class Program
         {
             var res = etcdClient.GetRange("", Metadata(etcdClient, etcdCredentials));
 
+            if (res.Kvs.Count == 0)
+            {
+                Console.WriteLine("No keys found.");
+                return;
+            }
+
             foreach (var kv in res.Kvs)
             {
                 Console.WriteLine($"Key: '{kv.Key.ToStringUtf8()}', Value: '{kv.Value.ToStringUtf8()}'");
@@ -172,6 +182,32 @@ class Program
         catch (Exception ex)
         {
             Console.WriteLine($"failed to list keys: {ex.Message}");
+            throw;
+        }
+    }
+
+    static void HandleWatch(EtcdClient etcdClient, EtcdCredentials etcdCredentials, string key)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(key))
+            {
+                etcdClient.Watch(new Etcdserverpb.WatchRequest { CreateRequest = new Etcdserverpb.WatchCreateRequest { Key = ByteString.CopyFromUtf8(key) } }, response =>
+                {
+                    foreach (var ev in response.Events)
+                    {
+                        Console.WriteLine($"Event: {ev.Type}, Key: {ev.Kv.Key.ToStringUtf8()}, Value: {ev.Kv.Value.ToStringUtf8()}");
+                    }
+                }, Metadata(etcdClient, etcdCredentials));
+            }
+            else
+            {
+                Console.WriteLine("failed to watch key. Please provide a key.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"failed to watch key {key}: {ex.Message}");
             throw;
         }
     }
